@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 const TABS = [
   { key: "content", label: "المحتوى" },
@@ -213,9 +215,75 @@ function MindMapNode({ node, depth }: { node: any; depth: number }) {
 }
 
 function MindMapView({ nodesJson }: any) {
-  const tree = parseOutline(nodesJson);
-  if (!tree.title) return <p className="text-sm text-majalis-ink/60">لا توجد خريطة ذهنية بعد.</p>;
-  return <MindMapNode node={tree} depth={0} />;
+  const text = nodesJson?.outline?.trim();
+
+  if (!text) {
+    return (
+      <p className="text-sm text-majalis-ink/60">
+        لا توجد خريطة ذهنية بعد.
+      </p>
+    );
+  }
+
+  return (
+    <div
+      dir="rtl"
+      className="
+        max-w-none text-right text-sm leading-8
+        text-majalis-ink
+        dark:text-stone-100
+      "
+    >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mb-4 mt-2 border-b border-majalis-gold/30 pb-2 font-display text-2xl font-bold">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-2 mt-5 rounded-lg bg-majalis-gold px-3 py-2 text-lg font-bold text-majalis-ink">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-2 mt-4 font-bold text-majalis-gold">
+              {children}
+            </h3>
+          ),
+          ul: ({ children }) => (
+            <ul className="mb-3 list-disc space-y-1 pr-6">
+              {children}
+            </ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="mb-3 list-decimal space-y-1 pr-6">
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => (
+            <li className="pr-1">{children}</li>
+          ),
+          p: ({ children }) => (
+            <p className="mb-2">{children}</p>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="my-3 border-r-4 border-majalis-gold bg-majalis-beige px-4 py-2 dark:bg-stone-800">
+              {children}
+            </blockquote>
+          ),
+          strong: ({ children }) => (
+            <strong className="font-bold text-majalis-green dark:text-majalis-goldSoft">
+              {children}
+            </strong>
+          ),
+        }}
+      >
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 function FlashcardsView({ sessionId, cards, authed, flashToast }: any) {

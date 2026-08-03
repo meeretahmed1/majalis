@@ -2,6 +2,7 @@
 
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function NavBar() {
   const { data: session } = useSession();

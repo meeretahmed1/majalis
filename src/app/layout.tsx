@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
 import NavBar from "@/components/NavBar";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "مجالس — من المجلس إلى الحياة",
@@ -12,11 +13,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ar" dir="rtl">
       <body className="font-body">
-        <SessionProviderWrapper>
-          <NavBar />
-          <main className="mx-auto max-w-4xl px-4 py-6">{children}</main>
-        </SessionProviderWrapper>
-      </body>
+  <ThemeProvider>
+    <SessionProviderWrapper>
+      <NavBar />
+      <main className="mx-auto max-w-4xl px-4 py-6">
+        {children}
+      </main>
+    </SessionProviderWrapper>
+  </ThemeProvider>
+</body>
     </html>
   );
 }
