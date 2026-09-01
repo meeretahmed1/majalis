@@ -5,9 +5,15 @@ import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function BookPage({ params }: { params: { slug: string } }) {
+export default async function BookPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+
   const book = await prisma.book.findUnique({
-    where: { slug: params.slug },
+    where: { slug },
     include: {
       author: true,
       teacher: true,
