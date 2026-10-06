@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   // Temporary protection: only allow requests carrying the deployment secret.
   const secret = request.headers.get("x-fix-secret");
 
-  if (!process.env.NEXTAUTH_SECRET || secret !== process.env.NEXTAUTH_SECRET) {
+  if (!process.env.FIX_FATH_TOKEN || secret !== process.env.FIX_FATH_TOKEN) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
