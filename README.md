@@ -142,3 +142,21 @@ tests/                        اختبارات Vitest
 - الصلاحيات الإدارية (`requireRole(["ADMIN", "TEACHER"])`) مفصولة تماماً عن صلاحيات الطالب.
 - سجل تدقيق (`AuditLog`) يحفظ من قام بأي تعديل إداري وماذا فعل.
 - **قبل الإنتاج الفعلي**، أضف أيضاً: تحديد معدل الطلبات (Rate Limiting) على `/api/register` و`/api/auth`، وفحص أنواع/أحجام الملفات إن أضفت رفع ملفات مباشر لاحقاً، وسياسة خصوصية وشروط استخدام (نصوص قانونية خارج نطاق هذا الكود).
+
+## Fix: Fath al-Qareeb book URL
+
+The canonical slug for **فتح القريب المجيب** is now `fath-al-qareeb`.
+Old Arabic URLs are redirected to the canonical ASCII URL.
+
+After deploying the code, run this once against the production database:
+
+```bash
+npm run db:add-fath-al-qareeb
+```
+
+This command safely migrates an existing Arabic slug in place (preserving its relations), or creates the book if it does not exist.
+The canonical page is:
+
+```text
+/books/fath-al-qareeb
+```

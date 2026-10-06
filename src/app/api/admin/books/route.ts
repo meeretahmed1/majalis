@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
+import { FATH_AL_QAREEB_LEGACY_SLUG, FATH_AL_QAREEB_SLUG } from "@/lib/book-slugs";
 
 // GET /api/admin/books
 export async function GET() {
@@ -35,13 +36,28 @@ export async function POST() {
   try {
     await requireRole(["ADMIN"]);
 
-    const slug =
-      "كتاب-فتح-القريب-المجيب-في-شرح-ألفاظ-التقريب";
+    const slug = FATH_AL_QAREEB_SLUG;
 
-    // If the book already exists, return it instead of creating a duplicate
-    const existingBook = await prisma.book.findUnique({
-      where: { slug },
+    // If the old Arabic-slug record exists, migrate it in place so all relations are preserved.
+    const canonicalBook = await prisma.book.findUnique({ where: { slug } });
+    const legacyBook = await prisma.book.findUnique({
+      where: { slug: FATH_AL_QAREEB_LEGACY_SLUG },
     });
+
+    if (!canonicalBook && legacyBook) {
+      const migratedBook = await prisma.book.update({
+        where: { id: legacyBook.id },
+        data: { slug },
+      });
+      return NextResponse.json({
+        success: true,
+        migrated: true,
+        book: migratedBook,
+      });
+    }
+
+    // If the canonical book already exists, return it instead of creating a duplicate.
+    const existingBook = canonicalBook;
 
     if (existingBook) {
       return NextResponse.json({

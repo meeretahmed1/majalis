@@ -2,6 +2,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+const CANONICAL_SLUG = "fath-al-qareeb";
+const LEGACY_SLUG = "كتاب-فتح-القريب-المجيب-في-شرح-ألفاظ-التقريب";
+
 async function main() {
   console.log("📚 Adding فتح القريب المجيب...");
 
@@ -30,9 +33,21 @@ async function main() {
     });
   }
 
+  // Migrate the old Arabic slug first so existing sections/sessions keep the same book ID.
+  const legacyBook = await prisma.book.findUnique({ where: { slug: LEGACY_SLUG } });
+  const canonicalBook = await prisma.book.findUnique({ where: { slug: CANONICAL_SLUG } });
+
+  if (legacyBook && !canonicalBook) {
+    await prisma.book.update({
+      where: { id: legacyBook.id },
+      data: { slug: CANONICAL_SLUG },
+    });
+    console.log("🔁 Migrated legacy Arabic slug to:", CANONICAL_SLUG);
+  }
+
   const book = await prisma.book.upsert({
     where: {
-      slug: "كتاب-فتح-القريب-المجيب-في-شرح-ألفاظ-التقريب",
+      slug: CANONICAL_SLUG,
     },
 
     update: {
@@ -48,7 +63,7 @@ async function main() {
     create: {
       title: "فتح القريب المجيب في شرح ألفاظ التقريب",
 
-      slug: "كتاب-فتح-القريب-المجيب-في-شرح-ألفاظ-التقريب",
+      slug: CANONICAL_SLUG,
 
       cover: "📖",
 

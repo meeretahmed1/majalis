@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { normalizeBookSlug } from "@/lib/book-slugs";
 import SessionTabs from "@/components/SessionTabs";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,13 @@ export default async function SessionPage({
 }: {
   params: { slug: string; sessionSlug: string };
 }) {
-  const book = await prisma.book.findUnique({ where: { slug: params.slug } });
+  const normalizedSlug = normalizeBookSlug(params.slug);
+
+  if (normalizedSlug !== params.slug) {
+    redirect(`/books/${normalizedSlug}/sessions/${params.sessionSlug}`);
+  }
+
+  const book = await prisma.book.findUnique({ where: { slug: normalizedSlug } });
   if (!book) notFound();
 
   const session = await prisma.session.findFirst({

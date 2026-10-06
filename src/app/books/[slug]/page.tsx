@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/rbac";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { normalizeBookSlug } from "@/lib/book-slugs";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +12,15 @@ export default async function BookPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  const normalizedSlug = normalizeBookSlug(slug);
+
+  // Keep old Arabic links working, but use a stable ASCII slug as the canonical URL.
+  if (normalizedSlug !== slug) {
+    redirect(`/books/${normalizedSlug}`);
+  }
 
   const book = await prisma.book.findUnique({
-    where: { slug },
+    where: { slug: normalizedSlug },
     include: {
       author: true,
       teacher: true,
