@@ -15,7 +15,7 @@ export async function GET() {
 
 const createBookSchema = z.object({
   title: z.string().min(1),
-  slug: z.string().min(1),
+  slug: z.string().optional(),
   description: z.string().min(1),
   goals: z.array(z.string()).default([]),
   level: z.string().default("مبتدئ"),
@@ -30,10 +30,14 @@ const createBookSchema = z.object({
 export async function POST(req: Request) {
   try {
     const user = await requireRole(["ADMIN"]);
-    const body = createBookSchema.parse(await req.json());
+   const body = createBookSchema.parse(await req.json());
 
-    const book = await prisma.book.create({
-      data: { ...body, status: "DRAFT", sections: { create: { title: "الباب الأول", order: 1 } } },
+// Always generate the technical URL slug on the server.
+// This avoids Arabic URL-encoding problems and duplicate slugs.
+const safeSlug = `book-${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+
+const book = await prisma.book.create({
+      data: { ...body, slug: safeSlug, status: "DRAFT", sections: { create: { title: "الباب الأول", order: 1 } } },
       include: { sections: true },
     });
 
