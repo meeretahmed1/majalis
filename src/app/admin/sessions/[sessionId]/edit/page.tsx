@@ -14,17 +14,50 @@ export default function AdminSessionEditPage({ params }: { params: { sessionId: 
   const [session, setSession] = useState<any>(null);
   const [allSessions, setAllSessions] = useState<any[]>([]);
   const [toast, setToast] = useState("");
+  const [aiUrl, setAiUrl] = useState("");
+  const [aiTranscript, setAiTranscript] = useState("");
+  const [aiDraft, setAiDraft] = useState<any>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState("");
 
   const flashToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 1800); };
 
   const load = useCallback(async () => {
     const s = await api(`/api/sessions/${params.sessionId}`);
     setSession(s);
+    setAiUrl(s.videoUrl || "");
     const books = await api(`/api/admin/books`);
     setAllSessions(books.flatMap((b: any) => b.sections.flatMap((sec: any) => sec.sessions)).filter((x: any) => x.id !== params.sessionId));
   }, [params.sessionId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const generateAi = async () => {
+    setAiBusy(true); setAiError(""); setAiDraft(null);
+    try {
+      const result = await api(`/api/admin/sessions/${params.sessionId}/generate`, { method: "POST", body: JSON.stringify({ videoUrl: aiUrl, transcript: aiTranscript }) });
+      setAiDraft(result);
+    } catch (e: any) { setAiError(e.message); }
+    finally { setAiBusy(false); }
+  };
+  const saveAi = async () => {
+    if (!aiDraft) return;
+    setAiBusy(true); setAiError("");
+    try {
+      const g = aiDraft.generated;
+      await api(`/api/admin/sessions/${params.sessionId}`, { method: "PATCH", body: JSON.stringify({
+        title: g.title, videoUrl: aiDraft.videoUrl, textContent: aiDraft.transcript,
+        summary: { keyIdeas: g.keyIdeas, terms: g.terms, evidences: g.evidences, benefits: g.benefits, reviewPoints: g.reviewPoints },
+        mindMap: { outline: g.outline },
+      }) });
+      // Add generated study materials without deleting existing records.
+      for (const c of g.flashcards) await api(`/api/admin/sessions/${params.sessionId}/flashcards`, { method: "POST", body: JSON.stringify(c) });
+      for (const q of g.quizQuestions) await api(`/api/admin/sessions/${params.sessionId}/quiz-questions`, { method: "POST", body: JSON.stringify({ ...q, type: "MCQ" }) });
+      for (const l of g.lifeApplications) await api(`/api/admin/sessions/${params.sessionId}/life-applications`, { method: "POST", body: JSON.stringify(l) });
+      setAiDraft(null); await load(); flashToast("تم حفظ المحتوى المولّد");
+    } catch (e: any) { setAiError(`حدث خطأ أثناء الحفظ: ${e.message}. راجعي البيانات قبل إعادة المحاولة لتجنب التكرار.`); }
+    finally { setAiBusy(false); }
+  };
 
   if (!session) return <p className="text-sm text-majalis-ink/60">جارٍ التحميل...</p>;
 
@@ -129,6 +162,22 @@ export default function AdminSessionEditPage({ params }: { params: { sessionId: 
       <button onClick={() => router.push("/admin")} className="mb-3 text-sm text-majalis-ink/60">→ رجوع للوحة الإدارة</button>
       <h1 className="font-display mb-4 text-xl">تحرير: {session.title}</h1>
       {toast && <div className="mb-3 rounded-lg bg-majalis-gold px-3 py-2 text-sm">{toast}</div>}
+
+      <div className="mb-4 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4" dir="rtl">
+        <h2 className="mb-2 font-medium">✨ توليد محتوى المجلس من YouTube</h2>
+        <p className="mb-2 text-xs">المحتوى سيظهر للمعاينة أولاً ولن يُحفظ إلا بعد تأكيدك. لن تُحذف البطاقات أو الأسئلة القديمة.</p>
+        <input aria-label="رابط يوتيوب للتوليد" value={aiUrl} onChange={e => setAiUrl(e.target.value)} placeholder="رابط YouTube" className="mb-2 w-full rounded-lg border p-2 text-sm" />
+        <textarea aria-label="نص الترانسكريبت الاختياري" value={aiTranscript} onChange={e => setAiTranscript(e.target.value)} rows={4} placeholder="اختياري: الصقي Transcript هنا إذا لم يستطع الموقع استخراجه من YouTube" className="mb-2 w-full rounded-lg border p-2 text-sm" />
+        <button disabled={aiBusy || !aiUrl} onClick={generateAi} className="rounded-lg bg-majalis-gold px-3 py-2 text-sm disabled:opacity-50">{aiBusy ? "جارٍ المعالجة..." : "✨ توليد ومعاينة المحتوى"}</button>
+        {aiError && <p role="alert" className="mt-2 text-sm text-red-700">{aiError}</p>}
+        {aiDraft && <div className="mt-3 rounded-lg border p-3 text-sm">
+          <h3 className="mb-2 font-semibold">معاينة المحتوى قبل الحفظ</h3>
+          <p className="mb-2 text-xs">راجعي صحة الآيات والأحاديث والأجوبة قبل الحفظ. يمكن تعديل الحقول من محرر المجلس بعد الحفظ.</p>
+          <textarea dir="ltr" aria-label="محتوى AI بصيغة JSON" rows={16} className="w-full rounded-lg border p-2 font-mono text-xs" value={JSON.stringify(aiDraft.generated, null, 2)} readOnly />
+          <button disabled={aiBusy} onClick={saveAi} className="mt-2 rounded-lg bg-majalis-green px-3 py-2 text-sm text-white disabled:opacity-50">تأكيد وحفظ المحتوى</button>
+          <button disabled={aiBusy} onClick={() => setAiDraft(null)} className="mr-2 rounded-lg border px-3 py-2 text-sm">إلغاء</button>
+        </div>}
+      </div>
 
       <div className="mb-4 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4">
         <Field label="عنوان المجلس" value={session.title} onBlur={(v: string) => { setSession({ ...session, title: v }); patchSession({ title: v }); }} />
