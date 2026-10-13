@@ -4,32 +4,45 @@ import { requireRole } from "@/lib/rbac";
 import { z } from "zod";
 
 const createSessionSchema = z.object({
-  bookSectionId: z.string(),
+  bookSectionId: z.string().min(1),
   title: z.string().min(1),
   slug: z.string().min(1),
-  orderInBook: z.number().int(),
+  orderInBook: z.number().int().positive(),
 });
 
-// POST /api/admin/sessions -> إنشاء مجلس جديد كمسودة، مع سجلات فرعية فارغة جاهزة للتعبئة
+// POST /api/admin/sessions
+// إنشاء مجلس جديد مع ترتيب المجالس تلقائيًا
+
 export async function POST(req: Request) {
   try {
+    // التأكد من صلاحية المستخدم
     const user = await requireRole(["ADMIN", "TEACHER"]);
+
+    // قراءة البيانات والتحقق منها
     const body = createSessionSchema.parse(await req.json());
 
-    const session = await prisma.session.create({
-      data: {
-        ...body,
-        status: "DRAFT",
-        summary: { create: { keyIdeas: [], terms: [], evidences: [], benefits: [], reviewPoints: [] } },
-      },
-    });
+    // تنفيذ جميع التعديلات داخل Transaction
+    const session = await prisma.$transaction(async (tx) => {
 
-    await prisma.auditLog.create({
-      data: { adminId: user.id, action: "CREATE_SESSION", entityType: "Session", entityId: session.id },
-    });
+      // 1. جلب المجالس الموجودة داخل نفس الباب
+      const existingSessions = await tx.session.findMany({
+        where: {
+          bookSectionId: body.bookSectionId,
+        },
+        orderBy: [
+          { orderInBook: "asc" },
+          { createdAt: "asc" },
+          { id: "asc" },
+        ],
+      });
 
-    return NextResponse.json(session, { status: 201 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: err.status ?? 400 });
-  }
-}
+      // 2. تحديد مكان المجلس الجديد
+      const position = Math.min(
+        Math.max(body.orderInBook - 1, 0),
+        existingSessions.length
+      );
+
+      // 3. إنشاء المجلس الجديد
+      const newSession = await tx.session.create({
+        data: {
+          bookSectionId:
