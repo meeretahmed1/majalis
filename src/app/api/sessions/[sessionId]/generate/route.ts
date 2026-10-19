@@ -43,7 +43,7 @@ export async function POST(req: Request, { params }: { params: { sessionId: stri
     const source = transcript?.trim() || await captions(id).catch(() => "");
     if (source.length < 100) return NextResponse.json({ error: "تعذر الحصول على Transcript تلقائياً. انسخي نص الترجمة في الحقل المخصص ثم أعيدي المحاولة." }, { status: 422 });
     const prompt = `حلل النص العربي التالي لمجلس علمي، وأعد JSON فقط بهذه المفاتيح: title, keyIdeas (string[]), terms (string[]), evidences (string[]), benefits (string[]), reviewPoints (string[]), outline (string), flashcards ({front,back}[]), quizQuestions ({question,options (exactly 4 strings),correctAnswer (zero-based integer),explanation}[]), lifeApplications ({title,description}[]). اكتب 5-8 أفكار و5 بطاقات و5 أسئلة و3 تطبيقات. لا تختلق آيات أو أحاديث أو مصادر؛ الأدلة فقط مما ورد صراحة في النص، وإذا لم يوجد دليل اجعل القائمة فارغة. استعمل العربية الفصحى الواضحة، ولا تضف معلومات خارج النص. النص:\n${source.slice(0, 75000)}`;
-    const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.2 } }),
