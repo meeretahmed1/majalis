@@ -105,7 +105,7 @@ export async function POST(
 
     const prompt = `حلل النص العربي التالي لمجلس علمي، وأعد JSON فقط بهذه المفاتيح: title, keyIdeas (string[]), terms (string[]), evidences (string[]), benefits (string[]), reviewPoints (string[]), outline (string), flashcards ({front,back}[]), quizQuestions ({question,options (exactly 4 strings),correctAnswer (zero-based integer),explanation}[]), lifeApplications ({title,description}[]). اكتب 5-8 أفكار و5 بطاقات و5 أسئلة و3 تطبيقات. لا تختلق آيات أو أحاديث أو مصادر؛ الأدلة فقط مما ورد صراحة في النص، وإذا لم يوجد دليل اجعل القائمة فارغة. استعمل العربية الفصحى الواضحة، ولا تضف معلومات خارج النص. النص:\n${processedText}`;
 
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
