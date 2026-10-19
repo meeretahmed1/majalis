@@ -11,20 +11,17 @@ const createSessionSchema = z.object({
 });
 
 // POST /api/admin/sessions
-// إنشاء مجلس جديد مع ترتيب المجالس تلقائيًا
+// Create a new session with automatic ordering
 
 export async function POST(req: Request) {
   try {
-    // التأكد من صلاحية المستخدم
     const user = await requireRole(["ADMIN", "TEACHER"]);
 
-    // قراءة البيانات والتحقق منها
     const body = createSessionSchema.parse(await req.json());
 
-    // تنفيذ جميع التعديلات داخل Transaction
     const session = await prisma.$transaction(async (tx) => {
 
-      // 1. جلب المجالس الموجودة داخل نفس الباب
+      // 1. Get existing sessions in the same book section
       const existingSessions = await tx.session.findMany({
         where: {
           bookSectionId: body.bookSectionId,
@@ -36,13 +33,72 @@ export async function POST(req: Request) {
         ],
       });
 
-      // 2. تحديد مكان المجلس الجديد
+      // 2. Calculate the insertion position
       const position = Math.min(
         Math.max(body.orderInBook - 1, 0),
         existingSessions.length
       );
 
-      // 3. إنشاء المجلس الجديد
+      // 3. Create the new session
       const newSession = await tx.session.create({
         data: {
-          bookSectionId:
+          bookSectionId: body.bookSectionId,
+          title: body.title,
+          slug: body.slug,
+          orderInBook: existingSessions.length + 1,
+          status: "DRAFT",
+          summary: {
+            create: {
+              keyIdeas: [],
+              terms: [],
+              evidences: [],
+              benefits: [],
+              reviewPoints: [],
+            },
+          },
+        },
+      });
+
+      // 4. Insert new session into the correct position
+      const orderedIds = existingSessions.map((s) => s.id);
+
+      orderedIds.splice(position, 0, newSession.id);
+
+      // 5. Update the order of all sessions
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx.session.update({
+          where: {
+            id: orderedIds[i],
+          },
+          data: {
+            orderInBook: i + 1,
+          },
+        });
+      }
+
+      // 6. Record the operation in AuditLog
+      await tx.auditLog.create({
+        data: {
+          adminId: user.id,
+          action: "CREATE_SESSION",
+          entityType: "Session",
+          entityId: newSession.id,
+        },
+      });
+
+      return newSession;
+    });
+
+    return NextResponse.json(session, { status: 201 });
+
+  } catch (err: any) {
+    return NextResponse.json(
+      {
+        error: err?.message || "تعذر إنشاء المجلس",
+      },
+      {
+        status: err?.status ?? 400,
+      }
+    );
+  }
+}
