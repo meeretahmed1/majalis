@@ -43,17 +43,90 @@ export async function POST(req: Request, { params }: { params: { sessionId: stri
     const source = transcript?.trim() || await captions(id).catch(() => "");
     if (source.length < 100) return NextResponse.json({ error: "تعذر الحصول على Transcript تلقائياً. انسخي نص الترجمة في الحقل المخصص ثم أعيدي المحاولة." }, { status: 422 });
     const prompt = `حلل النص العربي التالي لمجلس علمي، وأعد JSON فقط بهذه المفاتيح: title, keyIdeas (string[]), terms (string[]), evidences (string[]), benefits (string[]), reviewPoints (string[]), outline (string), flashcards ({front,back}[]), quizQuestions ({question,options (exactly 4 strings),correctAnswer (zero-based integer),explanation}[]), lifeApplications ({title,description}[]). اكتب 5-8 أفكار و5 بطاقات و5 أسئلة و3 تطبيقات. لا تختلق آيات أو أحاديث أو مصادر؛ الأدلة فقط مما ورد صراحة في النص، وإذا لم يوجد دليل اجعل القائمة فارغة. استعمل العربية الفصحى الواضحة، ولا تضف معلومات خارج النص. النص:\n${source.slice(0, 75000)}`;
-    const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json", temperature: 0.2 } }),
-      signal: AbortSignal.timeout(45000),
-    });
-    if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      return NextResponse.json({ error: `فشل Gemini (${response.status}): ${detail.error?.message || "راجعي المفتاح أو حدود الاستخدام أو اسم النموذج"}` }, { status: 502 });
+        const primaryModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const fallbackModel = "gemini-2.5-flash-lite";
+
+    const models = [...new Set([primaryModel, fallbackModel])];
+
+    let result: any = null;
+    let lastError = "";
+    let retryable = true;
+
+    const deadline = Date.now() + 40000;
+
+    for (const model of models) {
+      if (!retryable) break;
+
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const remaining = deadline - Date.now();
+
+        if (remaining < 2000) break;
+
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-goog-api-key": key,
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  responseMimeType: "application/json",
+                  temperature: 0.2,
+                },
+              }),
+              signal: AbortSignal.timeout(
+                Math.min(12000, remaining)
+              ),
+            }
+          );
+
+          if (response.ok) {
+            result = await response.json();
+            break;
+          }
+
+          const detail = await response.json().catch(() => ({}));
+
+          lastError =
+            `Gemini (${response.status}): ` +
+            (detail.error?.message || "API request failed");
+
+          retryable = [429, 500, 502, 503, 504].includes(
+            response.status
+          );
+
+          if (!retryable) break;
+
+        } catch (error: any) {
+          lastError = error?.message || "Gemini request failed";
+          retryable = true;
+        }
+
+        if (attempt === 0 && retryable) {
+          const wait = Math.min(1500, deadline - Date.now() - 1000);
+          if (wait > 0) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, wait)
+            );
+          }
+        }
+      }
+
+      if (result) break;
     }
-    const result = await response.json();
+
+    if (!result) {
+      return NextResponse.json(
+        {
+          error: "تعذر توليد المحتوى حالياً. " + lastError,
+        },
+        { status: 502 }
+      );
+    }
     const text = result.candidates?.[0]?.content?.parts?.map((p: any) => p.text ?? "").join("");
     if (!text) throw new Error("لم يرجع النموذج محتوى");
     const generated = schema.parse(JSON.parse(text));
