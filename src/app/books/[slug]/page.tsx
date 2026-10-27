@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/rbac";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { normalizeBookSlug } from "@/lib/book-slugs";
 
@@ -46,17 +47,33 @@ export default async function BookPage({
   const completed = allSessions.filter((s) => progressBySession[s.id] === "COMPLETED").length;
   const percent = allSessions.length ? Math.round((completed / allSessions.length) * 100) : 0;
 
+  const isImageCover = Boolean(book.cover && (book.cover.startsWith("/") || book.cover.startsWith("http")));
+
   return (
     <div>
       <div className="mb-6 rounded-2xl border border-majalis-gold/30 bg-majalis-card p-5">
-        <div className="flex gap-4">
-          <div className="text-5xl">{book.cover ?? "📗"}</div>
-          <div>
-            <h1 className="font-display text-xl">{book.title}</h1>
-            <p className="text-sm text-majalis-ink/60">
+        <div className="flex flex-col sm:flex-row gap-5 items-start">
+          <div className="relative shrink-0 w-24 h-36 sm:w-28 sm:h-40 rounded-xl overflow-hidden border border-majalis-gold/40 shadow-md bg-majalis-sand/30 flex items-center justify-center">
+            {isImageCover ? (
+              <Image
+                src={book.cover!}
+                alt={book.title}
+                fill
+                priority
+                className="object-cover"
+                sizes="(max-width: 640px) 96px, 112px"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="text-5xl">{book.cover ?? "📗"}</span>
+            )}
+          </div>
+          <div className="flex-1">
+            <h1 className="font-display text-2xl">{book.title}</h1>
+            <p className="mt-1 text-sm text-majalis-ink/60">
               {book.author?.name} — يشرحه: {book.teacher?.name}
             </p>
-            <p className="mt-1 text-sm">{book.description}</p>
+            <p className="mt-2 text-sm leading-relaxed text-majalis-ink/80">{book.description}</p>
           </div>
         </div>
         {user && (
