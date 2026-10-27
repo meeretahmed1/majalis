@@ -4,6 +4,7 @@ import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import GlobalSearch from "@/components/GlobalSearch";
+import { PWAInstallButton } from "@/components/PWAInstallButton";
 import { BookMarked } from "lucide-react";
 
 export default function NavBar() {
@@ -44,6 +45,7 @@ export default function NavBar() {
               الإدارة
             </Link>
           )}
+          <PWAInstallButton />
           <ThemeToggle />
           {session ? (
             <button
