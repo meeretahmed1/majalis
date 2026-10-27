@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl">
-      <body className="font-body">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body className="font-body" suppressHydrationWarning>
   <ThemeProvider>
     <SessionProviderWrapper>
       <NavBar />

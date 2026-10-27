@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import AdminAddBookForm from "@/components/AdminAddBookForm";
 import AdminAddSessionButton from "@/components/AdminAddSessionButton";
+import AdminSessionReorderList from "@/components/AdminSessionReorderList";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export default async function AdminPage() {
           key={book.id}
           className="mb-6 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4"
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between border-b border-majalis-gold/20 pb-3">
             <div>
               <span className="font-display text-lg">{book.title}</span>
 
@@ -60,16 +61,24 @@ export default async function AdminPage() {
               </span>
             </div>
 
-            <PublishToggle bookId={book.id} status={book.status} />
+            <div className="flex items-center gap-3">
+              <Link
+                href={`/books/${book.slug}`}
+                className="text-xs text-majalis-ink/60 hover:text-majalis-gold underline"
+              >
+                معاينة الكتاب
+              </Link>
+              <PublishToggle bookId={book.id} status={book.status} />
+            </div>
           </div>
 
           {book.sections.map((section) => (
             <div
               key={section.id}
-              className="mb-3 rounded-lg border border-majalis-gold/20 bg-majalis-beige p-3"
+              className="mb-4 rounded-xl border border-majalis-gold/20 bg-majalis-beige/50 p-3.5"
             >
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm text-majalis-ink/60">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-majalis-ink">
                   {section.title}
                 </span>
 
@@ -84,38 +93,10 @@ export default async function AdminPage() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                {section.sessions.map((s) => (
-                  <Link
-                    key={s.id}
-                    href={`/admin/sessions/${s.id}/edit`}
-                    className="flex items-center justify-between rounded-lg bg-majalis-card px-3 py-2 text-sm hover:border-majalis-gold"
-                  >
-                    <span>
-                      <span className="ml-2 text-majalis-gold">
-                        {s.orderInBook}.
-                      </span>
-                      {s.title}
-                    </span>
-
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] ${
-                        s.status === "PUBLISHED"
-                          ? "bg-green-200"
-                          : "bg-amber-200"
-                      }`}
-                    >
-                      {s.status === "PUBLISHED" ? "منشور" : "مسودة"}
-                    </span>
-                  </Link>
-                ))}
-
-                {section.sessions.length === 0 && (
-                  <p className="text-xs text-majalis-ink/50">
-                    لا توجد مجالس في هذا الباب بعد.
-                  </p>
-                )}
-              </div>
+              <AdminSessionReorderList
+                sectionId={section.id}
+                initialSessions={section.sessions}
+              />
             </div>
           ))}
         </div>

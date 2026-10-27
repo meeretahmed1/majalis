@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
@@ -426,8 +426,12 @@ function QuestionsView({ sessionId, authed }: any) {
     NEEDS_RESEARCH: "يحتاج بحث",
   };
 
-  const load = () => authed && api(`/api/sessions/${sessionId}/questions`).then(setList).catch(() => {});
-  useEffect(() => { load(); }, [sessionId, authed]);
+  const load = useCallback(() => {
+    if (authed) {
+      api(`/api/sessions/${sessionId}/questions`).then(setList).catch(() => {});
+    }
+  }, [sessionId, authed]);
+  useEffect(() => { load(); }, [load]);
 
   const add = async () => {
     if (!text.trim() || !authed) return;

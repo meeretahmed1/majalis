@@ -2,65 +2,94 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { GoogleGenAI } from "@google/genai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const inputSchema = z.object({
-  videoUrl: z.string().url().max(500),
+  videoUrl: z.string().min(1).max(500),
   transcript: z.string().max(90000).optional(),
+  model: z.string().optional(),
 });
 
 const schema = z.object({
-  title: z.string(),
-  keyIdeas: z.array(z.string()),
-  terms: z.array(z.string()),
-  evidences: z.array(z.string()),
-  benefits: z.array(z.string()),
-  reviewPoints: z.array(z.string()),
-  outline: z.string(),
-  flashcards: z.array(z.object({ front: z.string(), back: z.string() })),
+  title: z.string().default("مجلس بدون عنوان"),
+  keyIdeas: z.array(z.string()).default([]),
+  terms: z.array(z.string()).default([]),
+  evidences: z.array(z.string()).default([]),
+  benefits: z.array(z.string()).default([]),
+  reviewPoints: z.array(z.string()).default([]),
+  outline: z.string().default(""),
+  flashcards: z.array(z.object({ front: z.string(), back: z.string() })).default([]),
   quizQuestions: z.array(
     z.object({
       question: z.string(),
-      options: z.array(z.string()).length(4),
-      correctAnswer: z.number().int().min(0).max(3),
-      explanation: z.string(),
+      options: z.array(z.string()),
+      correctAnswer: z.number().int().min(0).max(3).default(0),
+      explanation: z.string().default(""),
     })
-  ),
+  ).default([]),
   lifeApplications: z.array(
     z.object({ title: z.string(), description: z.string() })
-  ),
+  ).default([]),
 });
 
-function videoId(raw: string) {
+function extractVideoId(raw: string): string | null {
   try {
-    const u = new URL(raw);
-    if (u.hostname === "youtu.be") return u.pathname.slice(1);
-    if (["youtube.com", "www.youtube.com", "m.youtube.com"].includes(u.hostname))
-      return u.pathname.startsWith("/shorts/")
-        ? u.pathname.split("/")[2]
-        : u.searchParams.get("v");
+    const trimmed = raw.trim();
+    // Direct 11-char ID
+    if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+
+    // Pattern matching anywhere in URL or text
+    const match = trimmed.match(
+      /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|watch\?v=|watch\?.+&v=)|(?:^|[?&])v=)([a-zA-Z0-9_-]{11})/i
+    );
+    if (match && match[1]) return match[1];
+
+    // Fallback: look for v= parameter
+    const vParam = trimmed.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+    if (vParam) return vParam[1];
+
+    // Try parsing as standard URL
+    const urlStr = trimmed.startsWith("http") ? trimmed : `https://${trimmed}`;
+    const u = new URL(urlStr);
+    if (u.hostname.includes("youtu.be")) {
+      const seg = u.pathname.slice(1).split("/")[0];
+      if (/^[a-zA-Z0-9_-]{11}$/.test(seg)) return seg;
+    }
+    if (u.hostname.includes("youtube") || u.hostname.includes("youtu")) {
+      if (u.pathname.startsWith("/shorts/")) {
+        const seg = u.pathname.split("/")[2];
+        if (/^[a-zA-Z0-9_-]{11}$/.test(seg)) return seg;
+      }
+      const v = u.searchParams.get("v");
+      if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+    }
   } catch {
-    return null;
+    // ignore parse errors
   }
   return null;
 }
 
 async function captions(id: string): Promise<string> {
-  const r = await fetch(
-    `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(id)}&lang=ar&fmt=json3`,
-    { signal: AbortSignal.timeout(9000) }
-  );
-  if (!r.ok) return "";
-  const raw = await r.text();
-  if (!raw.trim().startsWith("{")) return "";
-  const json = JSON.parse(raw);
-  return (json.events ?? [])
-    .flatMap((e: any) => e.segs ?? [])
-    .map((s: any) => s.utf8 ?? "")
-    .join(" ")
-    .trim();
+  try {
+    const r = await fetch(
+      `https://www.youtube.com/api/timedtext?v=${encodeURIComponent(id)}&lang=ar&fmt=json3`,
+      { signal: AbortSignal.timeout(9000) }
+    );
+    if (!r.ok) return "";
+    const raw = await r.text();
+    if (!raw.trim().startsWith("{")) return "";
+    const json = JSON.parse(raw);
+    return (json.events ?? [])
+      .flatMap((e: any) => e.segs ?? [])
+      .map((s: any) => s.utf8 ?? "")
+      .join(" ")
+      .trim();
+  } catch {
+    return "";
+  }
 }
 
 export async function POST(
@@ -73,77 +102,183 @@ export async function POST(
       where: { id: params.sessionId },
       select: { id: true },
     });
-    if (!session)
+    if (!session) {
       return NextResponse.json({ error: "المجلس غير موجود" }, { status: 404 });
+    }
 
-    const { videoUrl, transcript } = inputSchema.parse(await req.json());
-    const id = videoId(videoUrl);
-    if (!id || !/^[a-zA-Z0-9_-]{11}$/.test(id))
+    const { videoUrl, transcript, model: customModel } = inputSchema.parse(
+      await req.json()
+    );
+
+    const id = extractVideoId(videoUrl);
+    if (!id) {
       return NextResponse.json(
-        { error: "رابط YouTube غير صحيح" },
+        { error: "تعذر استخراج معرّف فيديو YouTube. يرجى التأكد من صحة الرابط." },
         { status: 400 }
       );
+    }
 
-    const key = process.env.GEMINI_API_KEY;
-    if (!key)
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
       return NextResponse.json(
         { error: "أضيفي GEMINI_API_KEY إلى إعدادات السيرفر أولاً" },
         { status: 503 }
       );
+    }
 
     const source = transcript?.trim() || (await captions(id).catch(() => ""));
-    if (source.length < 100)
+    if (source.length < 50) {
       return NextResponse.json(
         {
           error:
-            "تعذر الحصول على تفريغ تلقائي. انسخي نص التفريغ في الحقل المخصص ثم أعيدي المحاولة.",
+            "تعذر الحصول على تفريغ تلقائي من YouTube. يرجى فتح الفيديو ونسخ نص التفريغ (Transcript) ولصقه في الحقل المخصص أدناه ثم إعادة المحاولة.",
         },
         { status: 422 }
       );
+    }
 
-    const processedText = source.slice(0, 30000);
+    const processedText = source.slice(0, 35000);
 
-    const prompt = `حلل النص العربي التالي لمجلس علمي، وأعد JSON فقط بهذه المفاتيح: title, keyIdeas (string[]), terms (string[]), evidences (string[]), benefits (string[]), reviewPoints (string[]), outline (string), flashcards ({front,back}[]), quizQuestions ({question,options (exactly 4 strings),correctAnswer (zero-based integer),explanation}[]), lifeApplications ({title,description}[]). اكتب 5-8 أفكار و5 بطاقات و5 أسئلة و3 تطبيقات. لا تختلق آيات أو أحاديث أو مصادر؛ الأدلة فقط مما ورد صراحة في النص، وإذا لم يوجد دليل اجعل القائمة فارغة. استعمل العربية الفصحى الواضحة، ولا تضف معلومات خارج النص. النص:\n${processedText}`;
+    const prompt = `حلل النص العربي التالي لمجلس علمي إسلامي، وأعد كائن JSON فقط باللغة العربية الفصحى وفق هذا المخطط الدقيق بدون نصوص توضيحية إضافية:
+{
+  "title": "عنوان موجز ودقيق للمجلس مستنبط من موضوع الشرح",
+  "keyIdeas": ["5 إلى 8 أفكار رئيسية وتأصيلية وردت في الدرس"],
+  "terms": ["المصطلحات الفقهية أو العلمية والتعريفات المذكورة في النص"],
+  "evidences": ["الآيات القرآنية والأحاديث النبوية المذكورة صراحة في النص فقط؛ إذا لم يرد دليل اجعل المصفوفة فارغة"],
+  "benefits": ["فوائد ولطائف وحكم مستفادة من المجلس"],
+  "reviewPoints": ["نقاط منهجية تحتاج إلى مراجعة وتأمل وتكرار"],
+  "outline": "خريطة ذهنية نصية منظمة بمسافات بادئة (Indented outline)",
+  "flashcards": [
+    {"front": "سؤال محدد عن مسألة أو تعريف في الدرس", "back": "الإجابة الموجزة الشافية"}
+  ],
+  "quizQuestions": [
+    {
+      "question": "نص سؤال الاختبار",
+      "options": ["الخيار الأول", "الخيار الثاني", "الخيار الثالث", "الخيار الرابع"],
+      "correctAnswer": 0,
+      "explanation": "شرح سبب صحة الإجابة اعتماداً على الدرس"
+    }
+  ],
+  "lifeApplications": [
+    {"title": "عنوان التطبيق العملي", "description": "خطوة عملية وتطبيقية في السلوك والعبادة والحياة اليومية"}
+  ]
+}
 
-    const model = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+قواعد مهمة:
+- اكتب 5-8 أفكار، و3-6 بطاقات، و3-5 أسئلة اختيار من متعدد (كل سؤال معه 4 خيارات ورقم الإجابة 0-3)، و2-4 تطبيقات حياتية.
+- لا تختلق أي آية أو حديث أو مصدر لم يرد في النص الأصلي مطلقاً.
+- اكتب بصيغة JSON نقية ومباشرة.
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-      {
-        method: "POST",
+النص المفرغ للمجلس:
+${processedText}`;
+
+    // Prepare candidate models for resilient fallback if a model experiences 503 high demand
+    const candidateModels = [
+      customModel,
+      process.env.GEMINI_MODEL,
+      "gemini-3.8-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+    ].filter(Boolean) as string[];
+
+    const modelsToTry = [...new Set(candidateModels)];
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
         headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": key,
+          "User-Agent": "aistudio-build",
         },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
+      },
+    });
+
+    let generatedData: any = null;
+    let successfulModel = "";
+    let lastErrorDetails = "";
+
+    for (const currentModel of modelsToTry) {
+      try {
+        const response = await ai.models.generateContent({
+          model: currentModel,
+          contents: prompt,
+          config: {
             responseMimeType: "application/json",
             temperature: 0.2,
           },
-        }),
-        signal: AbortSignal.timeout(52000),
-      }
-    );
+        });
 
-    if (!response.ok) {
-      const detail = await response.json().catch(() => ({}));
-      return NextResponse.json(
-        {
-          error: `فشل Gemini (${response.status}): ${detail.error?.message || "راجعي المفتاح أو حدود الاستخدام أو اسم النموذج"}`,
-        },
-        { status: 502 }
-      );
+        let responseText = response.text || "";
+        responseText = responseText.trim();
+
+        // Strip code fence if returned
+        if (responseText.startsWith("```json")) {
+          responseText = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+        } else if (responseText.startsWith("```")) {
+          responseText = responseText.replace(/^```\s*/i, "").replace(/```$/i, "").trim();
+        }
+
+        const parsedJson = JSON.parse(responseText);
+
+        // Ensure options length for quiz questions is 4
+        if (Array.isArray(parsedJson.quizQuestions)) {
+          parsedJson.quizQuestions = parsedJson.quizQuestions.map((q: any) => {
+            let opts = Array.isArray(q.options) ? q.options : [];
+            while (opts.length < 4) opts.push(`خيار ${opts.length + 1}`);
+            if (opts.length > 4) opts = opts.slice(0, 4);
+            return {
+              ...q,
+              options: opts,
+              correctAnswer: typeof q.correctAnswer === "number" && q.correctAnswer >= 0 && q.correctAnswer < 4 ? q.correctAnswer : 0,
+            };
+          });
+        }
+
+        generatedData = schema.parse(parsedJson);
+        successfulModel = currentModel;
+        break; // Success! Break out of the fallback loop
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        lastErrorDetails = errMsg;
+
+        // If high demand (503) or rate limit (429) or transient, try next model after brief pause
+        const isTransient =
+          errMsg.includes("503") ||
+          errMsg.includes("high demand") ||
+          errMsg.includes("429") ||
+          errMsg.includes("RESOURCE_EXHAUSTED") ||
+          errMsg.includes("500") ||
+          errMsg.includes("502") ||
+          errMsg.includes("504") ||
+          errMsg.includes("overloaded");
+
+        if (isTransient) {
+          console.warn(`[Gemini Fallback] Model ${currentModel} returned transient error: ${errMsg}. Trying next candidate model...`);
+          await new Promise((r) => setTimeout(r, 1200));
+          continue;
+        } else {
+          // If syntax/auth issue, continue to next model just in case
+          console.warn(`[Gemini Fallback] Model ${currentModel} failed: ${errMsg}`);
+          continue;
+        }
+      }
     }
 
-    const result = await response.json();
-    const text = result.candidates?.[0]?.content?.parts
-      ?.map((p: any) => p.text ?? "")
-      .join("");
-    if (!text) throw new Error("لم يرجع النموذج محتوى");
+    if (!generatedData) {
+      const is503 = lastErrorDetails.includes("503") || lastErrorDetails.includes("high demand");
+      const userMessage = is503
+        ? "خوادم Gemini تواجه حالياً ضغطاً مؤقتاً عالياً (503 High Demand). تمت المحاولة تلقائياً عبر عدة نماذج بديلة. يُرجى الانتظار 30 ثانية والضغط على «توليد ومعاينة المحتوى» مرة أخرى."
+        : `تعذر إكمال التوليد حالياً: ${lastErrorDetails}. يُرجى التحقق من المفتاح أو تقليل حجم النص المفرغ قليلاً.`;
 
-    const generated = schema.parse(JSON.parse(text));
-    return NextResponse.json({ generated, transcript: source, videoUrl });
+      return NextResponse.json({ error: userMessage }, { status: 503 });
+    }
+
+    return NextResponse.json({
+      generated: generatedData,
+      transcript: source,
+      videoUrl,
+      modelUsed: successfulModel,
+    });
   } catch (e: any) {
     const isTimeout =
       e?.name === "TimeoutError" ||

@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 
-// GET /api/books/:bookId -> تفاصيل الكتاب مع الأبواب والمجالس المنشورة فقط
-export async function GET(_req: Request, { params }: { params: { bookId: string } }) {
+// GET /api/books/:bookId -> تفاصيل الكتاب مع الأبواب والمجالس
+export async function GET(req: Request, { params }: { params: Promise<{ bookId: string }> | { bookId: string } }) {
+  const { bookId } = await params;
+  const url = new URL(req.url);
+  const includeAll = url.searchParams.get("all") === "true";
+
   const book = await prisma.book.findUnique({
-    where: { id: params.bookId },
+    where: { id: bookId },
     include: {
       category: true,
       author: true,
@@ -14,7 +18,7 @@ export async function GET(_req: Request, { params }: { params: { bookId: string 
         orderBy: { order: "asc" },
         include: {
           sessions: {
-            where: { status: "PUBLISHED" },
+            where: includeAll ? undefined : { status: "PUBLISHED" },
             orderBy: { orderInBook: "asc" },
           },
         },
@@ -27,12 +31,13 @@ export async function GET(_req: Request, { params }: { params: { bookId: string 
 }
 
 // PATCH /api/books/:bookId -> تعديل بيانات الكتاب (Admin فقط)
-export async function PATCH(req: Request, { params }: { params: { bookId: string } }) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ bookId: string }> | { bookId: string } }) {
   try {
     const user = await requireRole(["ADMIN"]);
+    const { bookId } = await params;
     const data = await req.json();
 
-    const book = await prisma.book.update({ where: { id: params.bookId }, data });
+    const book = await prisma.book.update({ where: { id: bookId }, data });
 
     await prisma.auditLog.create({
       data: { adminId: user.id, action: "UPDATE_BOOK", entityType: "Book", entityId: book.id },
@@ -45,13 +50,14 @@ export async function PATCH(req: Request, { params }: { params: { bookId: string
 }
 
 // DELETE /api/books/:bookId -> حذف الكتاب (Admin فقط)
-export async function DELETE(_req: Request, { params }: { params: { bookId: string } }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ bookId: string }> | { bookId: string } }) {
   try {
     const user = await requireRole(["ADMIN"]);
-    await prisma.book.delete({ where: { id: params.bookId } });
+    const { bookId } = await params;
+    await prisma.book.delete({ where: { id: bookId } });
 
     await prisma.auditLog.create({
-      data: { adminId: user.id, action: "DELETE_BOOK", entityType: "Book", entityId: params.bookId },
+      data: { adminId: user.id, action: "DELETE_BOOK", entityType: "Book", entityId: bookId },
     });
 
     return NextResponse.json({ ok: true });

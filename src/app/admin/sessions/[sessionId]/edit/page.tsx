@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 
 async function api(url: string, options?: RequestInit) {
@@ -9,8 +9,15 @@ async function api(url: string, options?: RequestInit) {
   return res.json();
 }
 
-export default function AdminSessionEditPage({ params }: { params: { sessionId: string } }) {
+export default function AdminSessionEditPage({
+  params,
+}: {
+  params: Promise<{ sessionId: string }> | { sessionId: string };
+}) {
   const router = useRouter();
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const sessionId = resolvedParams.sessionId;
+
   const [session, setSession] = useState<any>(null);
   const [allSessions, setAllSessions] = useState<any[]>([]);
   const [toast, setToast] = useState("");
@@ -19,23 +26,31 @@ export default function AdminSessionEditPage({ params }: { params: { sessionId: 
   const [aiDraft, setAiDraft] = useState<any>(null);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState("");
+  const [selectedModel, setSelectedModel] = useState("auto");
 
   const flashToast = (m: string) => { setToast(m); setTimeout(() => setToast(""), 1800); };
 
   const load = useCallback(async () => {
-    const s = await api(`/api/sessions/${params.sessionId}`);
+    const s = await api(`/api/sessions/${sessionId}`);
     setSession(s);
     setAiUrl(s.videoUrl || "");
     const books = await api(`/api/admin/books`);
-    setAllSessions(books.flatMap((b: any) => b.sections.flatMap((sec: any) => sec.sessions)).filter((x: any) => x.id !== params.sessionId));
-  }, [params.sessionId]);
+    setAllSessions(books.flatMap((b: any) => b.sections.flatMap((sec: any) => sec.sessions)).filter((x: any) => x.id !== sessionId));
+  }, [sessionId]);
 
   useEffect(() => { load(); }, [load]);
 
   const generateAi = async () => {
     setAiBusy(true); setAiError(""); setAiDraft(null);
     try {
-      const result = await api(`/api/admin/sessions/${params.sessionId}/generate`, { method: "POST", body: JSON.stringify({ videoUrl: aiUrl, transcript: aiTranscript }) });
+      const result = await api(`/api/admin/sessions/${sessionId}/generate`, {
+        method: "POST",
+        body: JSON.stringify({
+          videoUrl: aiUrl.trim(),
+          transcript: aiTranscript.trim(),
+          model: selectedModel !== "auto" ? selectedModel : undefined,
+        }),
+      });
       setAiDraft(result);
     } catch (e: any) { setAiError(e.message); }
     finally { setAiBusy(false); }
@@ -45,15 +60,15 @@ export default function AdminSessionEditPage({ params }: { params: { sessionId: 
     setAiBusy(true); setAiError("");
     try {
       const g = aiDraft.generated;
-      await api(`/api/admin/sessions/${params.sessionId}`, { method: "PATCH", body: JSON.stringify({
+      await api(`/api/admin/sessions/${sessionId}`, { method: "PATCH", body: JSON.stringify({
         title: g.title, videoUrl: aiDraft.videoUrl, textContent: aiDraft.transcript,
         summary: { keyIdeas: g.keyIdeas, terms: g.terms, evidences: g.evidences, benefits: g.benefits, reviewPoints: g.reviewPoints },
         mindMap: { outline: g.outline },
       }) });
       // Add generated study materials without deleting existing records.
-      for (const c of g.flashcards) await api(`/api/admin/sessions/${params.sessionId}/flashcards`, { method: "POST", body: JSON.stringify(c) });
-      for (const q of g.quizQuestions) await api(`/api/admin/sessions/${params.sessionId}/quiz-questions`, { method: "POST", body: JSON.stringify({ ...q, type: "MCQ" }) });
-      for (const l of g.lifeApplications) await api(`/api/admin/sessions/${params.sessionId}/life-applications`, { method: "POST", body: JSON.stringify(l) });
+      for (const c of g.flashcards) await api(`/api/admin/sessions/${sessionId}/flashcards`, { method: "POST", body: JSON.stringify(c) });
+      for (const q of g.quizQuestions) await api(`/api/admin/sessions/${sessionId}/quiz-questions`, { method: "POST", body: JSON.stringify({ ...q, type: "MCQ" }) });
+      for (const l of g.lifeApplications) await api(`/api/admin/sessions/${sessionId}/life-applications`, { method: "POST", body: JSON.stringify(l) });
       setAiDraft(null); await load(); flashToast("تم حفظ المحتوى المولّد");
     } catch (e: any) { setAiError(`حدث خطأ أثناء الحفظ: ${e.message}. راجعي البيانات قبل إعادة المحاولة لتجنب التكرار.`); }
     finally { setAiBusy(false); }
@@ -70,9 +85,9 @@ export default function AdminSessionEditPage({ params }: { params: { sessionId: 
     <div className="mb-3">
       <label className="mb-1 block text-xs text-majalis-ink/60">{label}</label>
       {area ? (
-        <textarea defaultValue={value} onBlur={(e) => onBlur(e.target.value)} rows={3} className="w-full rounded-lg border border-majalis-gold/30 bg-majalis-beige p-2 text-sm" />
+        <textarea defaultValue={value} onBlur={(e) => onBlur(e.target.value)} rows={3} className="w-full rounded-lg border border-majalis-gold/40 bg-white dark:bg-stone-800 text-majalis-ink dark:text-stone-100 p-2 text-sm focus:border-majalis-gold focus:outline-none" />
       ) : (
-        <input defaultValue={value} onBlur={(e) => onBlur(e.target.value)} className="w-full rounded-lg border border-majalis-gold/30 bg-majalis-beige p-2 text-sm" />
+        <input defaultValue={value} onBlur={(e) => onBlur(e.target.value)} className="w-full rounded-lg border border-majalis-gold/40 bg-white dark:bg-stone-800 text-majalis-ink dark:text-stone-100 p-2 text-sm focus:border-majalis-gold focus:outline-none" />
       )}
     </div>
   );
@@ -159,24 +174,149 @@ export default function AdminSessionEditPage({ params }: { params: { sessionId: 
 
   return (
     <div className="mx-auto max-w-xl">
-      <button onClick={() => router.push("/admin")} className="mb-3 text-sm text-majalis-ink/60">→ رجوع للوحة الإدارة</button>
-      <h1 className="font-display mb-4 text-xl">تحرير: {session.title}</h1>
+      <button onClick={() => router.push("/admin")} className="mb-3 text-sm text-majalis-ink/60 hover:text-majalis-ink">→ رجوع للوحة الإدارة</button>
+      <h1 className="font-display mb-4 text-xl">تحرير: {session.title || "مجلس جديد"}</h1>
       {toast && <div className="mb-3 rounded-lg bg-majalis-gold px-3 py-2 text-sm">{toast}</div>}
 
-      <div className="mb-4 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4" dir="rtl">
-        <h2 className="mb-2 font-medium">✨ توليد محتوى المجلس من YouTube</h2>
-        <p className="mb-2 text-xs">المحتوى سيظهر للمعاينة أولاً ولن يُحفظ إلا بعد تأكيدك. لن تُحذف البطاقات أو الأسئلة القديمة.</p>
-        <input aria-label="رابط يوتيوب للتوليد" value={aiUrl} onChange={e => setAiUrl(e.target.value)} placeholder="رابط YouTube" className="mb-2 w-full rounded-lg border p-2 text-sm" />
-        <textarea aria-label="نص الترانسكريبت الاختياري" value={aiTranscript} onChange={e => setAiTranscript(e.target.value)} rows={4} placeholder="اختياري: الصقي Transcript هنا إذا لم يستطع الموقع استخراجه من YouTube" className="mb-2 w-full rounded-lg border p-2 text-sm" />
-        <button disabled={aiBusy || !aiUrl} onClick={generateAi} className="rounded-lg bg-majalis-gold px-3 py-2 text-sm disabled:opacity-50">{aiBusy ? "جارٍ المعالجة..." : "✨ توليد ومعاينة المحتوى"}</button>
-        {aiError && <p role="alert" className="mt-2 text-sm text-red-700">{aiError}</p>}
-        {aiDraft && <div className="mt-3 rounded-lg border p-3 text-sm">
-          <h3 className="mb-2 font-semibold">معاينة المحتوى قبل الحفظ</h3>
-          <p className="mb-2 text-xs">راجعي صحة الآيات والأحاديث والأجوبة قبل الحفظ. يمكن تعديل الحقول من محرر المجلس بعد الحفظ.</p>
-          <textarea dir="ltr" aria-label="محتوى AI بصيغة JSON" rows={16} className="w-full rounded-lg border p-2 font-mono text-xs" value={JSON.stringify(aiDraft.generated, null, 2)} readOnly />
-          <button disabled={aiBusy} onClick={saveAi} className="mt-2 rounded-lg bg-majalis-green px-3 py-2 text-sm text-white disabled:opacity-50">تأكيد وحفظ المحتوى</button>
-          <button disabled={aiBusy} onClick={() => setAiDraft(null)} className="mr-2 rounded-lg border px-3 py-2 text-sm">إلغاء</button>
-        </div>}
+      <div className="mb-4 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4 shadow-sm" dir="rtl">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-medium flex items-center gap-1.5 text-base">
+            <span>✨</span> توليد محتوى المجلس من YouTube
+          </h2>
+          <span className="text-[11px] text-majalis-ink/60 bg-majalis-beige px-2 py-0.5 rounded-full">
+            مدعوم بـ Gemini
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-majalis-ink/70 leading-relaxed">
+          يقوم الذكاء الاصطناعي باستخراج الأفكار والمصطلحات والبطاقات والأسئلة والتطبيقات الحياتية. يمكنك معاينة المحتوى وتعديله قبل الحفظ.
+        </p>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-majalis-ink/80">نموذج الذكاء الاصطناعي (Gemini Model):</label>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="w-full rounded-lg border border-majalis-gold/40 bg-white dark:bg-stone-800 text-majalis-ink dark:text-stone-100 p-2 text-xs focus:border-majalis-gold focus:outline-none"
+          >
+            <option value="auto">تلقائي مع التبديل الذكي عند الضغط (موصى به)</option>
+            <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (سريع جداً وعالي التوفر)</option>
+            <option value="gemini-3.8-flash">gemini-3.8-flash (الأفضل دقة واستيعاباً)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (نموذج مستقر بديل)</option>
+          </select>
+        </div>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-majalis-ink/80">رابط الفيديو من YouTube:</label>
+          <input
+            aria-label="رابط يوتيوب للتوليد"
+            value={aiUrl}
+            onChange={e => setAiUrl(e.target.value)}
+            placeholder="مثال: https://www.youtube.com/watch?v=..."
+            className="w-full rounded-lg border border-majalis-gold/40 bg-white dark:bg-stone-800 text-majalis-ink dark:text-stone-100 p-2.5 text-sm placeholder:text-stone-400 focus:border-majalis-gold focus:outline-none"
+          />
+        </div>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-xs font-medium text-majalis-ink/80">
+            نص التفريغ (Transcript) — <span className="text-majalis-ink/50 font-normal">اختياري إذا توفرت ترجمة باليوتيوب</span>:
+          </label>
+          <textarea
+            aria-label="نص الترانسكريبت الاختياري"
+            value={aiTranscript}
+            onChange={e => setAiTranscript(e.target.value)}
+            rows={4}
+            placeholder="الصقي نص تفريغ الدرس هنا إذا لم يستطع الموقع استخراجه تلقائياً من YouTube"
+            className="w-full rounded-lg border border-majalis-gold/40 bg-white dark:bg-stone-800 text-majalis-ink dark:text-stone-100 p-2.5 text-sm placeholder:text-stone-400 focus:border-majalis-gold focus:outline-none"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            disabled={aiBusy || !aiUrl.trim()}
+            onClick={generateAi}
+            className="rounded-lg bg-majalis-gold px-4 py-2 text-sm font-medium text-majalis-ink disabled:opacity-50 hover:opacity-90 transition-opacity flex items-center gap-1.5"
+          >
+            {aiBusy ? (
+              <>
+                <span className="inline-block animate-spin">⏳</span>
+                <span>جارٍ المعالجة والتوليد...</span>
+              </>
+            ) : (
+              <>
+                <span>✨</span>
+                <span>توليد ومعاينة المحتوى</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {aiError && (
+          <div role="alert" className="mt-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/50 dark:text-red-200">
+            <div className="font-semibold mb-1 flex items-center gap-1">
+              <span>⚠️</span>
+              <span>تعذر إتمام التوليد:</span>
+            </div>
+            <p className="text-xs leading-relaxed mb-2">{aiError}</p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                onClick={generateAi}
+                disabled={aiBusy}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                🔄 إعادة المحاولة الآن
+              </button>
+              {selectedModel === "auto" && (
+                <button
+                  onClick={() => { setSelectedModel("gemini-3.1-flash-lite"); setTimeout(generateAi, 50); }}
+                  disabled={aiBusy}
+                  className="rounded-md border border-red-400 bg-white dark:bg-stone-800 px-3 py-1.5 text-xs text-red-800 dark:text-red-300 hover:bg-red-50 dark:hover:bg-stone-700 transition-colors"
+                >
+                  ⚡ تجربة نموذج Flash-Lite السريع
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {aiDraft && (
+          <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50/70 dark:border-emerald-800 dark:bg-emerald-950/30 p-3.5 text-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-emerald-900 dark:text-emerald-300">معاينة المحتوى قبل الحفظ</h3>
+              {aiDraft.modelUsed && (
+                <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/60 px-2 py-0.5 text-[11px] font-mono text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
+                  النموذج: {aiDraft.modelUsed}
+                </span>
+              )}
+            </div>
+            <p className="mb-2 text-xs text-stone-600 dark:text-stone-300">
+              راجعي صحة الآيات والأحاديث والأجوبة قبل الحفظ. بعد الحفظ يمكنك تعديل أي حقل من محرر المجلس.
+            </p>
+            <textarea
+              dir="ltr"
+              aria-label="محتوى AI بصيغة JSON"
+              rows={14}
+              className="w-full rounded-lg border border-stone-300 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 p-2 font-mono text-xs"
+              value={JSON.stringify(aiDraft.generated, null, 2)}
+              readOnly
+            />
+            <div className="mt-3 flex gap-2">
+              <button
+                disabled={aiBusy}
+                onClick={saveAi}
+                className="rounded-lg bg-majalis-green px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
+              >
+                تأكيد وحفظ المحتوى بالمجلس
+              </button>
+              <button
+                disabled={aiBusy}
+                onClick={() => setAiDraft(null)}
+                className="rounded-lg border border-stone-300 bg-white dark:bg-stone-800 px-3 py-2 text-sm text-stone-700 dark:text-stone-200 hover:bg-stone-50"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mb-4 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4">

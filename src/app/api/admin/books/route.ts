@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/rbac";
 import { FATH_AL_QAREEB_LEGACY_SLUG, FATH_AL_QAREEB_SLUG } from "@/lib/book-slugs";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/admin/books
 export async function GET() {
   try {
