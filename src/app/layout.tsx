@@ -3,7 +3,7 @@ import "./globals.css";
 import SessionProviderWrapper from "@/components/SessionProviderWrapper";
 import NavBar from "@/components/NavBar";
 import { ThemeProvider } from "@/components/theme-provider";
-import { OfflineIndicator } from "@/components/OfflineIndicator";
+import OfflineIndicator from "@/components/OfflineIndicator";
 
 export const viewport: Viewport = {
   themeColor: "#1F3D2B",

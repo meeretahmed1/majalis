@@ -398,7 +398,7 @@ let realPrismaFailed = false;
 if (process.env.DATABASE_URL && process.env.DATABASE_URL.trim() !== "") {
   try {
     realPrismaInstance = new PrismaClient({
-      log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
+      log: [],
     });
   } catch {
     realPrismaFailed = true;
