@@ -4,11 +4,116 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-page: #f4efe3;
+  --color-card: #fbf8f0;
+  --color-beige: #f4efe3;
+  --color-ink: #20261e;
+  --color-ink-muted: #576253;
+  --color-gold: #b8925a;
+  --color-green: #1f3d2b;
+}
+
+.dark {
+  --color-page: #101411;
+  --color-card: #161c17;
+  --color-beige: #1c241e;
+  --color-ink: #ede7da;
+  --color-ink-muted: #9aa796;
+  --color-gold: #c9a56e;
+  --color-green: #295039;
+}
+
 body {
-  background: #f4efe3;
-  color: #20261e;
+  background-color: var(--color-page);
+  color: var(--color-ink);
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 .font-display {
   font-family: "Amiri", serif;
+}
+
+/* Comprehensive Dark Mode Rules */
+.dark body {
+  background-color: #101411 !important;
+  color: #ede7da !important;
+}
+
+.dark header,
+.dark .bg-majalis-card {
+  background-color: #161c17 !important;
+  color: #ede7da !important;
+}
+
+.dark .bg-majalis-beige {
+  background-color: #1c241e !important;
+}
+
+.dark .bg-majalis-beige\/30,
+.dark .bg-majalis-beige\/40,
+.dark .bg-majalis-beige\/50,
+.dark .bg-majalis-sand\/30,
+.dark .bg-majalis-sand\/40 {
+  background-color: rgba(28, 36, 30, 0.6) !important;
+}
+
+.dark .bg-majalis-card\/80,
+.dark .bg-majalis-card\/90,
+.dark .bg-majalis-card\/95 {
+  background-color: rgba(22, 28, 23, 0.95) !important;
+}
+
+.dark .text-majalis-ink {
+  color: #ede7da !important;
+}
+
+.dark .text-majalis-ink\/60,
+.dark .text-majalis-ink\/70,
+.dark .text-majalis-ink\/75,
+.dark .text-majalis-ink\/80 {
+  color: #a3b09f !important;
+}
+
+.dark .text-majalis-ink\/40,
+.dark .text-majalis-ink\/50 {
+  color: #7a8876 !important;
+}
+
+.dark .border-majalis-gold\/20 {
+  border-color: rgba(184, 146, 90, 0.25) !important;
+}
+
+.dark .border-majalis-gold\/30 {
+  border-color: rgba(184, 146, 90, 0.35) !important;
+}
+
+.dark .border-majalis-gold\/40,
+.dark .border-majalis-gold\/50 {
+  border-color: rgba(184, 146, 90, 0.45) !important;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #1b231d !important;
+  color: #ede7da !important;
+  border-color: rgba(184, 146, 90, 0.35) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #6d7b69 !important;
+}
+
+.dark .bg-gradient-to-br,
+.dark .bg-gradient-to-r {
+  background-image: none !important;
+  background-color: #161c17 !important;
+}
+
+/* Modal and dialog dark backgrounds */
+.dark .shadow-2xl {
+  background-color: #161c17 !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6) !important;
 }

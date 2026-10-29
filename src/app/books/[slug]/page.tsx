@@ -53,7 +53,7 @@ export default async function BookPage({
     <div>
       <div className="mb-6 rounded-2xl border border-majalis-gold/30 bg-majalis-card p-5">
         <div className="flex flex-col sm:flex-row gap-5 items-start">
-          <div className="relative shrink-0 w-24 h-36 sm:w-28 sm:h-40 rounded-xl overflow-hidden border border-majalis-gold/40 shadow-md bg-majalis-sand/30 flex items-center justify-center">
+          <div className="relative shrink-0 w-24 h-36 sm:w-28 sm:h-40 rounded-xl overflow-hidden border border-majalis-gold/40 shadow-md bg-majalis-beige/50 flex items-center justify-center">
             {isImageCover ? (
               <Image
                 src={book.cover!}

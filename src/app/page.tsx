@@ -93,14 +93,15 @@ export default async function HomePage() {
                 className="group flex flex-col justify-between rounded-2xl border border-majalis-gold/30 bg-majalis-card p-4 hover:border-majalis-gold hover:shadow-md transition-all duration-200"
               >
                 <div className="flex gap-4">
-                  <div className="relative shrink-0 w-20 h-28 sm:w-24 sm:h-32 rounded-xl overflow-hidden border border-majalis-gold/40 shadow-sm bg-majalis-sand/30 flex items-center justify-center">
+                  <div className="relative shrink-0 w-20 h-28 sm:w-24 sm:h-32 rounded-xl overflow-hidden border border-majalis-gold/40 shadow-sm bg-majalis-beige/50 flex items-center justify-center">
                     {isImageCover ? (
                       <Image
                         src={book.cover!}
                         alt={book.title}
                         fill
+                        priority
                         className="object-cover group-hover:scale-105 transition-transform duration-300"
-                        sizes="(max-width: 640px) 80px, 96px"
+                        sizes="(max-width: 640px) 96px, 128px"
                         referrerPolicy="no-referrer"
                       />
                     ) : (

@@ -24,14 +24,15 @@ export default async function LibraryPage() {
               href={`/books/${book.slug}`}
               className="group flex gap-4 rounded-xl border border-majalis-gold/30 bg-majalis-card p-4 hover:border-majalis-gold hover:shadow-md transition-all duration-200"
             >
-              <div className="relative shrink-0 w-16 h-24 sm:w-20 sm:h-28 rounded-lg overflow-hidden border border-majalis-gold/40 shadow-sm bg-majalis-sand/30 flex items-center justify-center">
+              <div className="relative shrink-0 w-16 h-24 sm:w-20 sm:h-28 rounded-lg overflow-hidden border border-majalis-gold/40 shadow-sm bg-majalis-beige/50 flex items-center justify-center">
                 {isImageCover ? (
                   <Image
                     src={book.cover!}
                     alt={book.title}
                     fill
+                    priority
                     className="object-cover group-hover:scale-105 transition-transform duration-300"
-                    sizes="(max-width: 640px) 64px, 80px"
+                    sizes="(max-width: 640px) 80px, 96px"
                     referrerPolicy="no-referrer"
                   />
                 ) : (
