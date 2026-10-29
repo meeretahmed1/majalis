@@ -43,7 +43,7 @@ export default async function HomePage() {
               className="inline-flex items-center gap-2 rounded-xl border border-majalis-gold/50 bg-majalis-card/80 px-4 py-2.5 text-sm font-medium text-majalis-ink hover:border-majalis-gold transition-all"
             >
               <BookMarked className="h-4 w-4 text-majalis-gold" />
-              <span>كُنّاش الفوائد</span>
+              <span>فوائد</span>
             </Link>
           </div>
         </div>
