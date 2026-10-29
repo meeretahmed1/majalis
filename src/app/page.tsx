@@ -24,10 +24,6 @@ export default async function HomePage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden rounded-3xl border border-majalis-gold/40 bg-gradient-to-br from-majalis-card via-majalis-beige/40 to-majalis-card p-6 sm:p-8 shadow-sm">
         <div className="max-w-2xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-majalis-gold/30 bg-majalis-beige/50 px-3 py-1 text-xs font-medium text-majalis-gold mb-4">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>مدارسة منهجية أصيلة تجمع بين العلم والعمل</span>
-          </div>
           <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight text-majalis-ink leading-tight">
             من المجلس إلى الحياة
           </h1>
